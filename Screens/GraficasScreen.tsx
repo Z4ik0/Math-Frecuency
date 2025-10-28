@@ -1,83 +1,143 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, ScrollView, Dimensions, StyleSheet } from 'react-native';
-import { BarChart } from 'react-native-chart-kit';
+import React from 'react';
+import { View, Text, ScrollView, Dimensions, StyleSheet } from 'react-native';
+import { BarChart, PieChart } from 'react-native-chart-kit';
+import { useDatosContext } from "../Contexts/DatosContext"; 
 
 const screenWidth: number = Dimensions.get('window').width;
 
 const GraficasScreen: React.FC = () => {
-  const [frecuencias, setFrecuencias] = useState<number[]>([6, 7, 4, 2, 1]);
+    const { datos } = useDatosContext();
+    const { valores, frecuencias, tabla } = datos;
 
-  const actualizarFrecuencia = (index: number, texto: string): void => {
-    const copia = [...frecuencias];
-    const numero = parseInt(texto);
-    copia[index] = isNaN(numero) ? 0 : numero;
-    setFrecuencias(copia);
-  };
+    if (frecuencias.length === 0) {
+        return (
+            <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                    Genera tu tabla de frecuencia para ver la gráfica.
+                </Text>
+            </View>
+        );
+    }
 
-  const etiquetas: string[] = frecuencias.map((_, i) => (i + 1).toString());
+    const etiquetas: string[] = valores.map((v) => v.toString());
+    
+    const barColors = etiquetas.map((_, index) => {
+        return index % 2 === 0 
+          ? 'rgba(40, 40, 40, 1)'     
+          : 'rgba(90, 90, 90, 1)';   
+    });
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Tabla de Frecuencia</Text>
+    const pieColors = [
+        '#6A5ACD', '#4169E1', '#8A2BE2', '#483D8B', '#20B2AA', '#6495ED', '#9370DB', 
+    ];
+    
+   
+    const pieData = tabla.map((item, index) => ({
+        name: `${item.valor} (${(item.fr * 100).toFixed(1)}% fi)`, 
+        population: item.f, 
+        color: pieColors[index % pieColors.length],
+        legendFontColor: '#000000', 
+        legendFontSize: 12, 
+    }));
 
-      <View style={styles.table}>
-        {frecuencias.map((valor: number, index: number) => (
-          <View key={index} style={styles.row}>
-            <Text style={styles.label}>Xi: {index + 1}</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={valor.toString()}
-              onChangeText={(texto: string) => actualizarFrecuencia(index, texto)}
+    const chartConfig = {
+        backgroundColor: '#FFFFFF', 
+        backgroundGradientFrom: '#FFFFFF',
+        backgroundGradientTo: '#FFFFFF',
+        decimalPlaces: 0,
+        color: () => '#000000', 
+        labelColor: () => '#000000', 
+        axisLineColor: '#CCCCCC', 
+        gridColor: '#EEEEEE', 
+    };
+
+    const barWidth = 60; 
+    const minChartWidth = screenWidth - 30; 
+    const dynamicBarChartWidth = Math.max(minChartWidth, etiquetas.length * barWidth);
+
+    return (
+        <ScrollView contentContainerStyle={styles.container}>
+            
+            <Text style={styles.title}>Gráfico de Frecuencia Absoluta (ni)</Text>
+
+            <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={true} 
+                style={styles.barChartScrollView}
+                contentContainerStyle={{ paddingRight: 30 }} 
+            >
+                <BarChart
+                    data={{
+                        labels: etiquetas,
+                        datasets: [{ 
+                            data: frecuencias, 
+                            colors: barColors.map(color => (opacity = 1) => color), 
+                        }],
+                    }}
+                    width={dynamicBarChartWidth} 
+                    height={320}
+                    fromZero={true}
+                    withHorizontalLabels={true}
+                    yAxisLabel="" 
+                    yAxisSuffix="" 
+                    chartConfig={chartConfig}
+                    style={{ 
+                        marginVertical: 8,
+                        borderRadius: 16
+                    }}
+                />
+            </ScrollView>
+
+            <Text style={styles.title}>Gráfico de Frecuencia Relativa Porcentual (%fi)</Text>
+
+            <PieChart
+                data={pieData}
+                width={screenWidth - 32}
+                height={280}
+                chartConfig={chartConfig}
+                accessor="population" 
+                backgroundColor="transparent"
+                paddingLeft="15"
             />
-          </View>
-        ))}
-      </View>
-
-      <Text style={styles.title}>Gráfica de Frecuencia Absoluta</Text>
-
-      <BarChart
-        data={{
-          labels: etiquetas,
-          datasets: [{ data: frecuencias }],
-        }}
-        width={screenWidth - 32}
-        height={220}
-        fromZero={true}
-        withHorizontalLabels={true}
-        yAxisLabel=""
-        yAxisSuffix=""
-        chartConfig={{
-          backgroundColor: '#fff',
-          backgroundGradientFrom: '#fff',
-          backgroundGradientTo: '#fff',
-          decimalPlaces: 0,
-          color: (opacity: number) => `rgba(0, 122, 255, ${opacity})`,
-          labelColor: () => '#333',
-          style: {
-            borderRadius: 16,
-          },
-        }}
-        style={{ marginVertical: 16, borderRadius: 16 }}
-      />
-    </ScrollView>
-  );
+            
+        </ScrollView>
+    );
 };
 
 const styles = StyleSheet.create({
-  container: { padding: 16 },
-  title: { fontSize: 20, fontWeight: 'bold', marginVertical: 10 },
-  table: { marginVertical: 10 },
-  row: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  label: { width: 100, fontSize: 16 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 6,
-    width: 60,
-    textAlign: 'center',
-    borderRadius: 4,
-  },
+    container: { 
+        backgroundColor: '#FFFFFF', 
+        padding: 16,
+        paddingBottom: 40,
+    },
+    title: { 
+        fontSize: 18, 
+        fontWeight: 'bold', 
+        marginVertical: 25, 
+        marginTop: 10,
+        color: '#000000', 
+        borderBottomWidth: 2,
+        borderBottomColor: '#CCCCCC', 
+        paddingBottom: 5,
+        textAlign: 'center', 
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        padding: 80,
+        minHeight: 700, 
+    },
+    emptyText: {
+        fontSize: 18,
+        color: '#666666',
+        textAlign: 'center',
+        fontWeight: '600',
+    },
+    barChartScrollView: {
+       
+    }
 });
 
 export default GraficasScreen;

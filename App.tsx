@@ -1,11 +1,10 @@
 import { StatusBar } from "expo-status-bar";
-import { Navegation } from "./Navegation/Navegator";
-
+import { Navigation } from "./Navegation/Navegator"; 
 
 export default function App() {
   return (
     <>
-      <Navegation />
+      <Navigation /> 
       <StatusBar style="auto" />
     </>
   );
