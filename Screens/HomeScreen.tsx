@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, Alert, ScrollView, StyleSheet } from "react-native";
 import { calcularFrecuencia } from "../Utils/CalcularFrecuencias"; 
 import { useDatosContext, FilaFrecuencia } from "../Contexts/DatosContext"; 
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 function calcularMedia(datos: number[]) {
   const suma = datos.reduce((acc, val) => acc + val, 0);
@@ -11,12 +13,9 @@ function calcularMedia(datos: number[]) {
 function calcularMediana(datos: number[]) {
   const ordenados = [...datos].sort((a, b) => a - b);
   const mitad = Math.floor(ordenados.length / 2);
-
-  if (ordenados.length % 2 === 0) {
-    return (ordenados[mitad - 1] + ordenados[mitad]) / 2;
-  } else {
-    return ordenados[mitad];
-  }
+  return ordenados.length % 2 === 0
+    ? (ordenados[mitad - 1] + ordenados[mitad]) / 2
+    : ordenados[mitad];
 }
 
 function calcularModa(datos: number[]) {
@@ -24,13 +23,11 @@ function calcularModa(datos: number[]) {
   datos.forEach((num) => {
     conteo[num] = (conteo[num] || 0) + 1;
   });
-
   const max = Math.max(...Object.values(conteo));
   const modas = Object.keys(conteo)
     .filter((num) => conteo[Number(num)] === max)
     .map(Number);
-  if (modas.length === Object.keys(conteo).length) return [];
-  return modas;
+  return modas.length === Object.keys(conteo).length ? [] : modas;
 }
 
 export default function HomeScreen() {
@@ -45,41 +42,83 @@ export default function HomeScreen() {
   });
 
   const generarTabla = () => {
+    if (!entrada.trim()) {
+      Alert.alert("Error", "Por favor, ingresa al menos un dato.");
+      return;
+    }
     try {
-      if (!entrada.trim()) {
-        Alert.alert("Error", "Por favor, ingresa al menos un dato.");
-        return;
-      }
-
       const resultado = calcularFrecuencia(entrada);
-
       const totalF = resultado.reduce((acc, cur) => acc + cur.f, 0);
       const totalFr = resultado.reduce((acc, cur) => acc + cur.fr, 0);
-
-      const datosExpand = resultado.flatMap((fila) =>
-        Array(fila.f).fill(fila.valor)
-      );
-      
-      const media = calcularMedia(datosExpand as number[]);
-      const mediana = calcularMediana(datosExpand as number[]);
-      const moda = calcularModa(datosExpand as number[]);
-
+      const datosExpand = resultado.flatMap((fila) => Array(fila.f).fill(fila.valor));
+      const media = calcularMedia(datosExpand);
+      const mediana = calcularMediana(datosExpand);
+      const moda = calcularModa(datosExpand);
       setTabla(resultado);
       setTotal({ n: totalF, fr: totalFr });
       setEstadisticas({ media, mediana, moda });
-
-      setDatos(resultado); 
-
+      setDatos(resultado);
     } catch (error: any) {
       Alert.alert("Error", error.message);
     }
   };
 
+  const exportarPDF = async () => {
+    if (!tabla || tabla.length === 0) {
+      Alert.alert("No hay datos", "Genera la tabla antes de exportar.");
+      return;
+    }
+    const tablaHTML = tabla
+      .map((item) => `
+        <tr>
+          <td>${item.valor}</td>
+          <td>${item.f}</td>
+          <td>${item.fr.toFixed(2)}</td>
+          <td>${item.fa}</td>
+          <td>${(item.fra * 100).toFixed(0)}%</td>
+        </tr>
+      `)
+      .join('');
+    const html = `
+      <html>
+        <body>
+          <h1 style="text-align:center;">Tabla de Frecuencia</h1>
+          <table border="1" style="width:100%; text-align:center; border-collapse:collapse;">
+            <tr>
+              <th>Xi</th>
+              <th>ni</th>
+              <th>Ni</th>
+              <th>fi</th>
+              <th>Fi</th>
+            </tr>
+            ${tablaHTML}
+            <tr>
+              <td><strong>TOTAL</strong></td>
+              <td><strong>N=${total.n}</strong></td>
+              <td><strong>${total.fr.toFixed(2)}</strong></td>
+              <td></td>
+              <td><strong>${(tabla[tabla.length - 1].fra * 100).toFixed(0)}%</strong></td>
+            </tr>
+          </table>
+          <br/>
+          <h2 style="text-align:center;">Medidas Estadísticas</h2>
+          <p><strong>Media:</strong> ${estadisticas.media.toFixed(2)}</p>
+          <p><strong>Mediana:</strong> ${estadisticas.mediana}</p>
+          <p><strong>Moda:</strong> ${estadisticas.moda.length > 0 ? estadisticas.moda.join(", ") : "No hay moda"}</p>
+        </body>
+      </html>
+    `;
+    try {
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri);
+    } catch (error) {
+      Alert.alert("Error", "No se pudo generar el PDF.");
+      console.error(error);
+    }
+  };
+
   const handleEntradaChange = (text: string) => {
-    let filteredText = text.replace(/[^0-9\s,\.\-]/g, "");
-    filteredText = filteredText.replace(/\s{3,}/g, ' '); 
-    filteredText = filteredText.trimStart();
-    
+    let filteredText = text.replace(/[^0-9\s,\.\-]/g, "").replace(/\s{3,}/g, ' ').trimStart();
     setEntrada(filteredText);
   };
 
@@ -88,17 +127,12 @@ export default function HomeScreen() {
     setTabla(null);
     setTotal({ n: 0, fr: 0 });
     setEstadisticas({ media: 0, mediana: 0, moda: [] });
-    setDatos([]); 
+    setDatos([]);
   };
-
   return (
     <ScrollView style={styles.container}>
       <View style={styles.mainContent}>
-        
-        <Text style={styles.subtitle}>
-          Ingresa tus datos separados por comas o espacios:
-        </Text>
-
+        <Text style={styles.subtitle}>Ingresa tus datos separados por comas o espacios:</Text>
         <TextInput
           value={entrada}
           onChangeText={handleEntradaChange}
@@ -106,12 +140,10 @@ export default function HomeScreen() {
           keyboardType="numbers-and-punctuation"
           style={styles.input}
         />
-
         <View style={styles.buttonContainer}>
           <TouchableOpacity onPress={generarTabla} style={[styles.button, styles.generateButton]}>
             <Text style={styles.buttonText}>Generar tabla</Text>
           </TouchableOpacity>
-
           <TouchableOpacity onPress={limpiar} style={[styles.button, styles.clearButton]}>
             <Text style={styles.buttonText}>Limpiar</Text>
           </TouchableOpacity>
@@ -120,52 +152,46 @@ export default function HomeScreen() {
         {tabla && (
           <View style={styles.resultsContainer}>
             <View style={styles.statsContainer}>
-              <Text style={styles.statsTitle}>Medidas Estadísticas </Text>
+              <Text style={styles.statsTitle}>Medidas Estadísticas</Text>
               <Text style={styles.statItem}>Media: {estadisticas.media.toFixed(2)}</Text>
               <Text style={styles.statItem}>Mediana: {estadisticas.mediana}</Text>
               <Text style={styles.statItem}>
-                Moda:{" "}
-                {estadisticas.moda.length > 0
-                  ? estadisticas.moda.join(", ")
-                  : "No hay moda"}
+                Moda: {estadisticas.moda.length > 0 ? estadisticas.moda.join(", ") : "No hay moda"}
               </Text>
             </View>
 
             <View style={styles.tableContainer}>
               <View style={[styles.tableRow, styles.tableHeader]}>
-                <Text style={[styles.cell, styles.headerText, styles.topLeftCell, styles.firstColumn]}>Xi</Text>
+                <Text style={[styles.cell, styles.headerText]}>Xi</Text>
                 <Text style={[styles.cell, styles.headerText]}>ni</Text>
                 <Text style={[styles.cell, styles.headerText]}>Ni</Text>
                 <Text style={[styles.cell, styles.headerText]}>fi</Text>
-                <Text style={[styles.cell, styles.headerText, styles.topRightCell, styles.lastColumn]}>Fi</Text>
+                <Text style={[styles.cell, styles.headerText]}>Fi</Text>
               </View>
 
               {tabla.map((item, index) => (
-                <View 
-                    key={String(item.valor)} 
-                    style={[
-                        styles.tableRow, 
-                        styles.dataRow, 
-                        index === tabla.length - 1 && { borderBottomWidth: 0 } 
-                    ]}
-                >
-                    <Text style={[styles.cell, styles.firstColumn]}>{item.valor}</Text>
-                    <Text style={styles.cell}>{item.f}</Text>
-                    <Text style={styles.cell}>{item.fr.toFixed(2)}</Text> 
-                    <Text style={styles.cell}>{item.fa}</Text>
-                    <Text style={[styles.cell, styles.lastColumn]}>{(item.fra * 100).toFixed(0)}%</Text>
+                <View key={String(item.valor)} style={styles.tableRow}>
+                  <Text style={styles.cell}>{item.valor}</Text>
+                  <Text style={styles.cell}>{item.f}</Text>
+                  <Text style={styles.cell}>{item.fr.toFixed(2)}</Text>
+                  <Text style={styles.cell}>{item.fa}</Text>
+                  <Text style={styles.cell}>{(item.fra * 100).toFixed(0)}%</Text>
                 </View>
               ))}
 
-              <View style={[styles.tableRow, styles.totalRow, { borderBottomWidth: 0, borderTopWidth: 1, borderTopColor: '#000000' }]}>
-                <Text style={[styles.cell, styles.totalText, styles.bottomLeftCell, styles.firstColumn]}>TOTAL</Text>
-                <Text style={[styles.cell, styles.totalText]}>N={total.n}</Text>
-                <Text style={[styles.cell, styles.totalText]}>
-                  {total.fr.toFixed(2)}
-                </Text>
-                <Text style={[styles.cell, styles.totalText]}></Text>
-                <Text style={[styles.cell, styles.totalText, styles.bottomRightCell, styles.lastColumn]}>{(tabla[tabla.length - 1].fra * 100).toFixed(0)}%</Text> 
+              <View style={styles.tableRow}>
+                <Text style={styles.cell}>TOTAL</Text>
+                <Text style={styles.cell}>N={total.n}</Text>
+                <Text style={styles.cell}>{total.fr.toFixed(2)}</Text>
+                <Text style={styles.cell}></Text>
+                <Text style={styles.cell}>{(tabla[tabla.length - 1].fra * 100).toFixed(0)}%</Text>
               </View>
+            </View>
+
+            <View style={{ marginTop: 20, alignItems: 'center' }}>
+              <TouchableOpacity onPress={exportarPDF} style={[styles.button, { backgroundColor: '#007AFF', width: '100%' }]}>
+                <Text style={styles.buttonText}>Exportar PDF</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -179,15 +205,15 @@ const BORDER_RADIUS = 10;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF", 
+    backgroundColor: "#FFFFFF",
     padding: 20,
   },
   mainContent: {
     backgroundColor: "#FFFFFF",
     padding: 0,
-    alignSelf: 'center', 
+    alignSelf: 'center',
     width: '100%',
-    maxWidth: 400, 
+    maxWidth: 400,
   },
   subtitle: {
     fontSize: 16,
@@ -198,8 +224,8 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#000000", 
-    borderRadius: BORDER_RADIUS, 
+    borderColor: "#000000",
+    borderRadius: BORDER_RADIUS,
     padding: 15,
     fontSize: 16,
     textAlignVertical: "center",
@@ -211,12 +237,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 10,
-    marginBottom: 15, 
+    marginBottom: 15,
   },
   button: {
     paddingVertical: 10,
     paddingHorizontal: 20,
-    borderRadius: BORDER_RADIUS, 
+    borderRadius: BORDER_RADIUS,
     flex: 1,
   },
   generateButton: {
@@ -232,14 +258,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   resultsContainer: {
-    marginTop: 10, 
+    marginTop: 10,
   },
   statsContainer: {
-    marginTop: 10, 
-    marginBottom: 20, 
+    marginTop: 10,
+    marginBottom: 20,
     backgroundColor: "#FFFFFF",
     padding: 15,
-    borderRadius: BORDER_RADIUS, 
+    borderRadius: BORDER_RADIUS,
     borderWidth: 1,
     borderColor: "#000000",
   },
@@ -248,7 +274,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#000000",
     marginBottom: 8,
-    textAlign: 'center', 
+    textAlign: 'center',
   },
   statItem: {
     fontSize: 16,
@@ -257,31 +283,23 @@ const styles = StyleSheet.create({
   },
   tableContainer: {
     backgroundColor: "#FFFFFF",
-    borderWidth: 1, 
+    borderWidth: 1,
     borderColor: "#000000",
-    borderRadius: BORDER_RADIUS, 
+    borderRadius: BORDER_RADIUS,
     overflow: 'hidden',
   },
   tableHeader: {
-    backgroundColor: "#EAEAEA", 
-    borderBottomWidth: 1, 
+    backgroundColor: "#EAEAEA",
+    borderBottomWidth: 1,
     borderBottomColor: "#000000",
     paddingVertical: 10,
     flexDirection: "row",
   },
-  headerText: {
-    fontWeight: "600",
-    color: "#333333",
-    fontSize: 14,
-  },
   tableRow: {
     flexDirection: "row",
-    borderBottomWidth: 1, 
+    borderBottomWidth: 1,
     borderBottomColor: "#000000",
     paddingVertical: 8,
-  },
-  dataRow: {
-    backgroundColor: "#FFFFFF",
   },
   cell: {
     flex: 1,
@@ -289,35 +307,12 @@ const styles = StyleSheet.create({
     color: "#333333",
     paddingHorizontal: 5,
     fontSize: 14,
-    borderRightWidth: 1, 
+    borderRightWidth: 1,
     borderRightColor: "#000000",
   },
-  firstColumn: {
-    borderLeftWidth: 0, 
-  },
-  lastColumn: {
-    borderRightWidth: 0, 
-  },
-  totalRow: {
-    backgroundColor: "#FFFFFF", 
-    borderTopWidth: 1,
-    borderTopColor: "#000000",
-    flexDirection: "row",
-  },
-  totalText: {
-    fontWeight: "bold",
-    color: "#000000",
-  },
-  topLeftCell: {
-    borderTopLeftRadius: BORDER_RADIUS,
-  },
-  topRightCell: {
-    borderTopRightRadius: BORDER_RADIUS,
-  },
-  bottomLeftCell: {
-    borderBottomLeftRadius: BORDER_RADIUS,
-  },
-  bottomRightCell: {
-    borderBottomRightRadius: BORDER_RADIUS,
+  headerText: {
+    fontWeight: "600",
+    color: "#333333",
+    fontSize: 14,
   },
 });

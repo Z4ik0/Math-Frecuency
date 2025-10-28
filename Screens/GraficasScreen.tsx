@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, ScrollView, Dimensions, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Dimensions, StyleSheet, Button } from 'react-native';
 import { BarChart, PieChart } from 'react-native-chart-kit';
 import { useDatosContext } from "../Contexts/DatosContext"; 
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 const screenWidth: number = Dimensions.get('window').width;
 
@@ -31,8 +33,13 @@ const GraficasScreen: React.FC = () => {
         '#6A5ACD', '#4169E1', '#8A2BE2', '#483D8B', '#20B2AA', '#6495ED', '#9370DB', 
     ];
     
-   
-    const pieData = tabla.map((item, index) => ({
+    const pieData: {
+        name: string;
+        population: number;
+        color: string;
+        legendFontColor: string;
+        legendFontSize: number;
+    }[] = (tabla ?? []).map((item, index) => ({
         name: `${item.valor} (${(item.fr * 100).toFixed(1)}% fi)`, 
         population: item.f, 
         color: pieColors[index % pieColors.length],
@@ -54,6 +61,31 @@ const GraficasScreen: React.FC = () => {
     const barWidth = 60; 
     const minChartWidth = screenWidth - 30; 
     const dynamicBarChartWidth = Math.max(minChartWidth, etiquetas.length * barWidth);
+
+    const exportarPDF = async () => {
+        const tablaHTML = (tabla ?? [])
+            .map((item, i) => `<tr><td>${item.valor}</td><td>${item.f}</td><td>${(item.fr * 100).toFixed(1)}%</td></tr>`)
+            .join('');
+
+        const html = `
+            <html>
+              <body>
+                <h1 style="text-align:center;">Tabla de Frecuencia</h1>
+                <table border="1" style="width:100%; text-align:center; border-collapse:collapse;">
+                  <tr><th>Valor</th><th>ni</th><th>%fi</th></tr>
+                  ${tablaHTML}
+                </table>
+              </body>
+            </html>
+        `;
+
+        try {
+            const { uri } = await Print.printToFileAsync({ html });
+            await Sharing.shareAsync(uri);
+        } catch (error) {
+            console.error('Error al generar PDF:', error);
+        }
+    };
 
     return (
         <ScrollView contentContainerStyle={styles.container}>
@@ -99,7 +131,15 @@ const GraficasScreen: React.FC = () => {
                 backgroundColor="transparent"
                 paddingLeft="15"
             />
-            
+
+            {/* <View style={{ marginTop: 30 }}>
+                <Text style={{ textAlign: 'center', marginBottom: 10, fontWeight: 'bold' }}>Exportar</Text>
+                <View style={{ alignItems: 'center' }}>
+                    <View style={{ width: 120 }}>
+                        <Button title="PDF" onPress={exportarPDF} />
+                    </View>
+                </View>
+            </View> */}
         </ScrollView>
     );
 };
