@@ -6,18 +6,20 @@ import {
   TouchableOpacity,
   FlatList,
   Alert,
+  ScrollView,
   StyleSheet,
-  Pressable,
 } from "react-native";
-import {
-  calcularFrecuencia,
-  FilaFrecuencia,
-} from "../Utils/CalcularFrecuencias";
+import { calcularFrecuencia, FilaFrecuencia } from "../Utils/CalcularFrecuencias";
 
 export default function HomeScreen() {
   const [entrada, setEntrada] = useState("");
   const [tabla, setTabla] = useState<FilaFrecuencia[] | null>(null);
   const [total, setTotal] = useState({ n: 0, fr: 0 });
+  const [estadisticas, setEstadisticas] = useState({
+    media: 0,
+    mediana: 0,
+    moda: [] as number[],
+  });
 
   const generarTabla = () => {
     try {
@@ -31,8 +33,17 @@ export default function HomeScreen() {
       const totalF = resultado.reduce((acc, cur) => acc + cur.f, 0);
       const totalFr = resultado.reduce((acc, cur) => acc + cur.fr, 0);
 
-      setTotal({ n: totalF, fr: totalFr });
+      // Calcular medidas estadísticas
+      const datosExpand = resultado.flatMap((fila) =>
+        Array(fila.f).fill(fila.valor)
+      );
+      const media = calcularMedia(datosExpand);
+      const mediana = calcularMediana(datosExpand);
+      const moda = calcularModa(datosExpand);
+
       setTabla(resultado);
+      setTotal({ n: totalF, fr: totalFr });
+      setEstadisticas({ media, mediana, moda });
     } catch (error: any) {
       Alert.alert("Error", error.message);
     }
@@ -41,6 +52,8 @@ export default function HomeScreen() {
   const limpiar = () => {
     setEntrada("");
     setTabla(null);
+    setTotal({ n: 0, fr: 0 });
+    setEstadisticas({ media: 0, mediana: 0, moda: [] });
   };
 
   return (
@@ -52,25 +65,19 @@ export default function HomeScreen() {
       <TextInput
         value={entrada}
         onChangeText={setEntrada}
-        placeholder="Ejemplo: 15 , 16 , 15 , 17 , 16 , 15 , 18 , 16 , 16 , 17"
+        placeholder="Ejemplo: 15,16,15,17,16,15,18,16,16,17"
         multiline
         style={styles.input}
       />
 
       <View style={styles.buttonContainer}>
-        <Pressable
-          onPress={generarTabla}
-          style={[styles.button, styles.generateButton]}
-        >
+        <TouchableOpacity onPress={generarTabla} style={[styles.button, styles.generateButton]}>
           <Text style={styles.buttonText}>Generar tabla</Text>
-        </Pressable>
+        </TouchableOpacity>
 
-        <Pressable
-          onPress={limpiar}
-          style={[styles.button, styles.clearButton]}
-        >
+        <TouchableOpacity onPress={limpiar} style={[styles.button, styles.clearButton]}>
           <Text style={styles.buttonText}>Limpiar</Text>
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       {tabla && (
@@ -86,6 +93,7 @@ export default function HomeScreen() {
             <Text style={[styles.cell, styles.headerText]}>Fra</Text>
           </View>
 
+          {/* Filas */}
           <FlatList
             data={tabla}
             keyExtractor={(item) => String(item.valor)}
@@ -99,6 +107,8 @@ export default function HomeScreen() {
               </View>
             )}
           />
+
+          {/* Totales */}
           <View style={[styles.tableRow, styles.totalRow]}>
             <Text style={[styles.cell, styles.totalText]}>Total</Text>
             <Text style={[styles.cell, styles.totalText]}>{total.n}</Text>
@@ -108,12 +118,56 @@ export default function HomeScreen() {
             <Text style={[styles.cell, styles.totalText]}></Text>
             <Text style={[styles.cell, styles.totalText]}></Text>
           </View>
+
+          {/* Estadísticas */}
+          <View style={styles.statsContainer}>
+            <Text style={styles.statsTitle}>📈 Medidas Estadísticas</Text>
+            <Text style={styles.statItem}>Media: {estadisticas.media.toFixed(2)}</Text>
+            <Text style={styles.statItem}>Mediana: {estadisticas.mediana}</Text>
+            <Text style={styles.statItem}>
+              Moda:{" "}
+              {estadisticas.moda.length > 0
+                ? estadisticas.moda.join(", ")
+                : "No hay moda"}
+            </Text>
+          </View>
         </View>
       )}
     </View>
   );
 }
 
+// --- FUNCIONES AUXILIARES ---
+function calcularMedia(datos: number[]) {
+  const suma = datos.reduce((acc, val) => acc + val, 0);
+  return suma / datos.length;
+}
+
+function calcularMediana(datos: number[]) {
+  const ordenados = [...datos].sort((a, b) => a - b);
+  const mitad = Math.floor(ordenados.length / 2);
+
+  if (ordenados.length % 2 === 0) {
+    return (ordenados[mitad - 1] + ordenados[mitad]) / 2;
+  } else {
+    return ordenados[mitad];
+  }
+}
+
+function calcularModa(datos: number[]) {
+  const conteo: Record<number, number> = {};
+  datos.forEach((num) => {
+    conteo[num] = (conteo[num] || 0) + 1;
+  });
+  const max = Math.max(...Object.values(conteo));
+  const modas = Object.keys(conteo)
+    .filter((num) => conteo[Number(num)] === max)
+    .map(Number);
+  if (modas.length === Object.keys(conteo).length) return [];
+  return modas;
+}
+
+// --- ESTILOS ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -158,7 +212,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#3B3B98",
   },
   clearButton: {
-    backgroundColor: "#ff0000ff",
+    backgroundColor: "#999",
   },
   buttonText: {
     color: "#FFF",
@@ -210,5 +264,22 @@ const styles = StyleSheet.create({
   totalText: {
     fontWeight: "bold",
     color: "#3B3B98",
+  },
+  statsContainer: {
+    marginTop: 16,
+    backgroundColor: "#F0F3FF",
+    padding: 10,
+    borderRadius: 8,
+  },
+  statsTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#3B3B98",
+    marginBottom: 6,
+  },
+  statItem: {
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 2,
   },
 });
